@@ -1,6 +1,6 @@
 # UEFI Secure Boot
 
-UEFI Secure Boot is a firmware-level security feature defined in the [UEFI specification](https://uefi.org/specs/UEFI/2.11/32_Secure_Boot_and_Driver_Signing.html). It prevents unauthorized code from running during the boot process by verifying digital signatures on every UEFI image before executing it. The keys and certificates used for verification are stored in firmware variables.
+UEFI Secure Boot is a firmware-level security feature defined in the [UEFI specification](https://uefi.org/specs/UEFI/2.11/32_Secure_Boot_and_Driver_Signing.html). It prevents unauthorized code from running during the boot process by verifying digital signatures on every UEFI image before executing it.
 
 > **Related topics not covered here:**
 > - [UEFI boot process](https://github.com/ManiAm/os-boot-process/blob/master/docs/02_firmware_bios_and_uefi.md) — firmware phases, ESP, NVRAM
@@ -26,7 +26,7 @@ This made **bootkits** — malware that infects the boot process — straightfor
 
 ### UEFI Without Secure Boot — Same Problem
 
-Even early UEFI firmware (before Secure Boot was introduced in UEFI 2.3.1 in 2011) had the same fundamental issue — it loaded and executed EFI binaries from the ESP without any signature verification.
+Even early UEFI firmware (before Secure Boot was introduced) had the same fundamental issue — it loaded and executed EFI binaries from the ESP without any signature verification.
 
 ### The Fix
 
@@ -74,9 +74,9 @@ The key parts for Secure Boot are:
 
 The Attribute Certificate Table does not contain just a raw signature. It contains one or more `WIN_CERTIFICATE` structures, each holding an **Authenticode signature package** in PKCS#7 / CMS format — a structure that bundles three things together:
 
-> **Note:** Despite the "WIN_" prefix, `WIN_CERTIFICATE` is not Windows-specific. Microsoft originally defined this structure as part of the Authenticode and PE/COFF specifications in the 1990s. When UEFI adopted the PE/COFF format for EFI executables, it inherited `WIN_CERTIFICATE` as the standard signature wrapper. All platforms use it — Linux signing tools (`sbsign`, `pesign`), shim, GRUB, and ARM firmware all read and write `WIN_CERTIFICATE` structures.
-
 <img src="../pics/attr-cert-table.png" alt="Attribute Certificate Table structure" width="700">
+
+> **Note:** Despite the "WIN_" prefix, `WIN_CERTIFICATE` is not Windows-specific. Microsoft originally defined this structure as part of the Authenticode and PE/COFF specifications in the 1990s. When UEFI adopted the PE/COFF format for EFI executables, it inherited `WIN_CERTIFICATE` as the standard signature wrapper. All platforms use it — Linux signing tools (`sbsign`, `pesign`), shim, GRUB, and ARM firmware all read and write `WIN_CERTIFICATE` structures.
 
 As you can see, the signed binary is a **self-contained package** — code, data, signature, and certificates all in one `.efi` file. No separate signature files are needed.
 
@@ -146,7 +146,7 @@ But how does the firmware decide whether a signing certificate is "trusted," and
 
 ## The Trust Databases: db and dbx
 
-The firmware maintains two databases: **db** and **dbx**. Together, they control **what code is allowed to run at boot time**.
+The firmware maintains two databases: **db** and **dbx**. Together, they control what code is allowed to run at boot time.
 
 ### db — The Authorized Signature Database
 
@@ -160,7 +160,7 @@ The **db** (Authorized Signature Database) contains entries that the firmware **
 
 A typical PC ships with several certificates in db. The exact contents depend on the manufacturer. Here are two real-world examples:
 
-**Custom-built desktop (American Megatrends BIOS) — 2 entries:**
+**Custom-built desktop (American Megatrends BIOS)**
 
 | # | db Entry | Type | Purpose |
 |---|----------|------|---------|
@@ -184,7 +184,7 @@ Notice the difference: the OEM laptop has vendor-specific certificates and updat
 
 The **dbx** (Forbidden Signature Database) is the opposite of db. It contains entries that are **explicitly denied**, even if they would otherwise be authorized by db. Each entry can be a certificate, a public key, or a hash — just like db.
 
-dbx is how revocation works. When a bootloader is found to have a security vulnerability, its hash (or its signing certificate) is added to dbx. The firmware will then reject that image, even though it carries a valid signature from a trusted certificate in db. For details on how dbx updates are delivered and the SBAT revocation mechanism, see [Revocation with dbx](#revocation-with-dbx).
+dbx is how revocation works. When a bootloader is found to have a security vulnerability, its hash (or its signing certificate) is added to dbx. The firmware will then reject that image, even though it carries a valid signature from a trusted certificate in db. For details on how dbx updates are delivered, see [Revocation with dbx](#revocation-with-dbx).
 
 **Key rule: dbx is always checked first and takes precedence over db.** If an image matches an entry in both dbx and db, it is rejected.
 
@@ -251,7 +251,7 @@ This is used when you need to allow a specific unsigned binary to run — for ex
 
 ## Who Controls db and dbx: The Key Hierarchy
 
-The previous sections explain **what** db and dbx do. The natural next question is: **who is allowed to add or remove entries in these databases?**
+The previous sections explain what db and dbx do. The natural next question is: **who is allowed to add or remove entries in these databases?**
 
 If anyone could modify db, an attacker could simply add their own certificate and boot whatever they want. If anyone could modify dbx, an attacker could remove revocation entries and restore trust in vulnerable binaries. The databases must be protected.
 
@@ -368,7 +368,7 @@ Once a PK is enrolled, the platform transitions to **User Mode**. In this mode:
 
 ### An Important Distinction: User Mode ≠ Secure Boot On
 
-A common misconception is that entering User Mode automatically turns on Secure Boot image verification. It does not. The firmware tracks these as **two separate things** using two independent variables:
+A common misconception is that entering User Mode automatically turns on Secure Boot image verification. It does not. The firmware tracks these as two separate things using two independent variables:
 
 | Variable     | What It Controls |
 |--------------|-----------------|
@@ -650,7 +650,7 @@ This is partially addressed within the Secure Boot ecosystem:
 
 ### Hardware Root of Trust
 
-Secure Boot's [software root of trust](#software-root-of-trust) can be undermined if the firmware itself is compromised. A **hardware root of trust** solves this by moving the starting point of the trust chain into the CPU silicon — something an attacker cannot modify:
+Secure Boot's [software root of trust](#software-root-of-trust) can be undermined if the firmware itself is compromised. A hardware root of trust solves this by moving the starting point of the trust chain into the CPU silicon — something an attacker cannot modify:
 
 - **Intel Boot Guard** — A hash of the firmware signing key is burned into one-time-programmable (OTP) fuses on the CPU during manufacturing. These fuses are permanent and cannot be changed. When the machine powers on, the CPU's Authenticated Code Module (ACM) verifies the first firmware code (the Initial Boot Block) against this fused key hash — before any UEFI code runs. If the firmware has been tampered with, the CPU refuses to execute it. Once the verified firmware starts, it initializes UEFI Secure Boot, which continues the chain from the DXE phase onward.
 
@@ -744,6 +744,8 @@ The result is a tamper-evident record of everything that executed during boot:
 
 This tamper-evident record can then be used for **sealing** (releasing secrets only if the boot chain matches expected values) and **remote attestation** (proving to a remote server what code actually booted).
 
+> For details on PCR usage, sealing, and attestation, see the [TPM reference](https://github.com/ManiAm/TPM/blob/master/docs/02-TPM-internals.md#platform-configuration-registers-pcrs).
+
 It is important to note that Secure Boot and Measured Boot are **independent** — neither requires the other:
 
 | | Secure Boot | Measured Boot |
@@ -755,8 +757,6 @@ It is important to note that Secure Boot and Measured Boot are **independent** �
 | **Alone** | Prevents unauthorized code but leaves no proof | Records everything but blocks nothing |
 
 The strongest posture uses both: Secure Boot **prevents**, Measured Boot **proves**.
-
-> For details on PCR usage, sealing, and attestation, see the [TPM reference](https://github.com/ManiAm/TPM/blob/master/docs/02-TPM-internals.md#platform-configuration-registers-pcrs).
 
 
 ## References
